@@ -71,14 +71,14 @@ public class ProjectOne {
         return ans;
     }
     
-    public static ArrayList<byte[]> getData(){
+    public static ArrayList<byte[]> getData(String textFilePath){
 
         BufferedReader reader;
 
         ArrayList<byte[]> data = new ArrayList<byte[]>();
 
         try{
-            reader = new BufferedReader(new FileReader("/home/yichuan/Documents/leetcode/Records.txt"));
+            reader = new BufferedReader(new FileReader(textFilePath));
 
             String line = reader.readLine();
 
@@ -172,7 +172,6 @@ public class ProjectOne {
 		}
 		int numTuple = byteArrayToInt(numTupleByte);
 
-
 		offsetBuffer = numTuple*100+8;
 
 		if (offsetBuffer+100<readBuffer.length) {
@@ -194,6 +193,7 @@ public class ProjectOne {
 			writeOneRecord(currentPage, tuple, MyStorage);
 			
 		}
+//		MyStorage.printStats();
 //		//	print log file
 //		System.out.println("current page is: " + Integer.toString(currentPage));
 //		
@@ -242,7 +242,7 @@ public class ProjectOne {
 //		System.out.println("Next page is");
 //		System.out.println(nextPage);
 		
-		MyStorage.DeAllocatePage(firstPageAddr);
+		MyStorage.DeAllocatePage((long) firstPageAddr);
 		fileEntry.setNumberOfPages(fileEntry.getNumberOfPages()-1);
 		while (nextPage != 0) {
 			byte[] temBuffer1 = new byte[MyStorage.pageSize];
@@ -250,7 +250,7 @@ public class ProjectOne {
 			pagesBuffered.add(temBuffer1);
 			int tem = nextPage;
 			nextPage = getNextPagePointer(tem, MyStorage);
-			MyStorage.DeAllocatePage(tem);
+			MyStorage.DeAllocatePage((long) tem);
 			fileEntry.setNumberOfPages(fileEntry.getNumberOfPages()-1);
 //			printBufferContent(pagesBuffered.get(1));
 		}
@@ -303,19 +303,26 @@ public class ProjectOne {
 
 	}
 	
-	public static byte[] getTuple() {
-		byte[] res = new byte[100];
-		
-		
-		return res;
-	}
-	
 	public static void main(String[] args) throws Exception {
 		// create storage.
 		PBStorage MyStorage = new PBStorage();
-		String folderName = "/home/yichuan/Documents/COMS661/test";
-		int pageSize = 4096;
-		int nPages = 10000;
+		
+		Scanner reader = new Scanner(System.in);  // Reading from System.in
+		System.out.println("Enter the folder path of your storage: ");
+		String folderName = reader.nextLine(); // Scans the next token of the input as an int.
+		System.out.println("Enter the page size: ");
+		String PS = reader.nextLine();
+		System.out.println("Enter the number of pages in your storage: ");
+		String NP = reader.nextLine();
+		System.out.println("Enter the value of M: ");
+		String MString = reader.nextLine();
+		reader.close();
+		
+//		String folderName = "/home/yichuan/Documents/COMS661/test";
+
+		int pageSize = Integer.parseInt(PS);
+		int nPages = Integer.parseInt(NP);
+		
 		String filename = "projectOne";
 		MyStorage.CreateStorage(folderName, pageSize, nPages);
 		System.out.println(
@@ -326,7 +333,8 @@ public class ProjectOne {
 		
 		byte[] initializePage = new byte[MyStorage.pageSize];
 		byte[] tempBuffer = new byte[MyStorage.pageSize];
-		// asks for a Page numbers
+		
+		// Allocate the home page for the linearly hashed file
 		int homePage = MyStorage.AllocatePage();
 		MyStorage.WritePage(homePage, initializePage);
 		System.out.println("Newpage numbers: " + homePage);
@@ -343,19 +351,16 @@ public class ProjectOne {
 		}
 		
 		String LtoP_File = "LtoPOf_"+filename;
-//		String M = Integer.toString(3);
-//		String sP = Integer.toString(0);
-//		String ACL_Min = "1.25";
-//		String ACL_Max = "1.50";
-//		String ACL ="0";
+		int M = Integer.parseInt(MString);
+
 		PBFileEntry e = new PBFileEntry();
 		e.setName(filename);
 		e.setHomePage(Integer.toString(homePage));
 		e.setLtoP(LtoP_File);
-		e.setM(3);
+		e.setM(M);
 		e.setsP(0);
-		e.setNumberOfPages(3);
-		e.setACL_Min((float) 0.0);
+		e.setNumberOfPages(M);
+		e.setACL_Min((float) 1.25);
 		e.setACL_Max((float) 1.5);
 		e.setACL((float) 1.0);
 		
@@ -364,28 +369,28 @@ public class ProjectOne {
 		for (int i = 0; i<M_tem; i++) {
 			int homePageOfChain = MyStorage.AllocatePage();
 			MyStorage.WritePage(homePageOfChain, initializePage);
-//			System.out.println(homePageOfChain);
 			tempBuffer = writeLtoP_Map(homePageOfChain, tempBuffer, i);
 		}
 		MyStorage.WritePage(homePage, tempBuffer);
+		
 		
 		//	generate a tuple with 100 bytes first 4 bytes is ID and random for others
 		byte[] tuple = new byte[100];
 		byte[] ID_tem = new byte[4];
 		
-		ArrayList<byte[]> records = getData();
+		String filePath = "/home/yichuan/Documents/leetcode/Records.txt";
+		ArrayList<byte[]> records = getData(filePath);
 		System.out.println(records.size());
 		
-		for (int k = 0; k<10000; k++) {
+		for (int k = 0; k<500; k++) {
 			
-//			new Random().nextBytes(tuple);
-			tuple = records.get(k);
+//			new Random().nextBytes(tuple);	
 //			ID_tem = intToByteArray(k);
 //			for (int j = 0; j<4; j++) {
 //				tuple[j] = ID_tem[j];
 //			}
-//			
-//			tuple = getTuple();
+			
+			tuple = records.get(k);
 			
 			//	get the ID from the byte array of tuples
 			byte[] tempID = new byte[4];
@@ -416,35 +421,12 @@ public class ProjectOne {
 			}
 		}
 		
-//		while (e.getACL()>1.5) {
-//			doSplit(MyStorage, e);
-//			if (e.getsP()>=e.getM()) {
-//				e.setsP(0);
-//				e.setM(2*e.getM());
-//			}
-//			e.setACL( (float) e.getNumberOfPages()/(e.getM()+e.getsP()) );
-//			System.out.println(e.getNumberOfPages());
-//		}
 //		doSplit(MyStorage, e);
 		System.out.println("Current total page number is " + e.getNumberOfPages()); //page number
 		System.out.println("The current acl value is " + e.getACL()); //true acl value
 		System.out.println("The current sP value is " + e.getsP()); //sP value
 		System.out.println("The current M is " + e.getM()); // M value
-//		MyStorage.printStats();
-		
-//		byte[] read_Buffer = new byte[MyStorage.pageSize];
-//		for (int i = 0; i<=e.getNumberOfPages(); i++) {
-//			MyStorage.ReadPage(i, read_Buffer);
-//			printBufferContent(read_Buffer);
-//		}
-		
-		
-//		MyStorage.LoadStorage(folderName);
-//		int currentPage = MyStorage.getHomePage(filename);
-//		if (currentPage == -1) {
-//			System.out.println("file does not exist");
-//		}
-//		MyStorage.ReadPage(currentPage, tempBuffer);
+		MyStorage.printStats();
 
 	}
 }
