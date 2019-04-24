@@ -13,6 +13,9 @@ import java.io.IOException;
 
 public class ProjectOne {
 
+	/* intToByteArray function is used to convert
+	 * int to byte array, in this project, each int stored
+	 * in the datatbase as 4 bytes */
 	public static byte[] intToByteArray(int value) {
 		byte[] array = new byte[4];
 		for (int i = 3; i >= 0; i--) {
@@ -21,6 +24,8 @@ public class ProjectOne {
 		return array;
 	}
 
+	/* byteArrayToInt function is used to convert 
+	 * convert byte array to int*/
 	public static int byteArrayToInt(byte[] byteArray) {
 		int value = 0;
 		for (int i = 0; i < byteArray.length; i++) {
@@ -30,6 +35,8 @@ public class ProjectOne {
 		return value;
 	}
 
+	/* stringToByteArray function is used to Convert a string to byte array (byte[]). 
+	 * A string needs to be converted to a byte array to be inserted into a page*/
     public static byte[] stringToByteArray(String str){
 
         int index = str.indexOf(',');
@@ -40,17 +47,12 @@ public class ProjectOne {
 
         String dataString = str.substring(index + 1, l-1);
 
-
-        // System.out.println(ID);
-
-        // System.out.println(dataString);
-
         byte[] ans = new byte[100];
 
         char[] buffer = dataString.toCharArray();
 
         int res = Integer.valueOf(ID);
-        // System.out.print(res);
+
         byte IDValue[] = intToByteArray(res);
 
         for(int i=0; i<4; i++){
@@ -60,18 +62,14 @@ public class ProjectOne {
         for(int i=4; i<dataString.length(); i++){
             ans[i] = (byte)buffer[i];
         }
-
-//        int test = byteArrayToInt(IDValue);
-
-        // System.out.println(test);
-
-        // for(int i=0; i<4; i++){
-        //     System.out.println(ans[i]);
-        // }   
+  
         return ans;
     }
     
-    public static ArrayList<byte[]> getData(String textFilePath){
+    /* Read all the records from file and save them into arraylist of byte arrays.
+    * Prepare all the records to be in the format of byte arrays, in order for 
+    * them to be inserted into pages.*/
+    public static ArrayList<byte[]> getRecords(String textFilePath){
 
         BufferedReader reader;
 
@@ -85,7 +83,6 @@ public class ProjectOne {
             while(line != null){
                 byte temp[] = stringToByteArray(line);
                 data.add(temp);
-                // System.out.println(line);
                 line = reader.readLine();
             }
 
@@ -98,7 +95,7 @@ public class ProjectOne {
 
     }
 
-    
+    /* print the content of the buffer, this function is used for debgging*/
 	public static void printBufferContent(byte[] tempBuffer) {
 		String print = "[ ";
 		for (int i = 0; i<tempBuffer.length; i++) {
@@ -108,39 +105,48 @@ public class ProjectOne {
 		System.out.println(print);
 	}
 	
-	public static int getPhy(int linearAddr, byte[] temBuffer) {
-		byte[] array = new byte[4];
+	/* Get the physical address given the linear address and the hash map, LtoP_Map. 
+	* LtoP_Map maps the linear address to the physical address*/
+	public static int getPhy(int linearAddr, byte[] hashmap) {
+		byte[] phyAddr = new byte[4];
 		for (int i = 0; i <4; i++) {
-			array[i] = temBuffer[linearAddr*4+i];
+			phyAddr[i] = hashmap[linearAddr*4+i];
 		}
-		return byteArrayToInt(array);
+		return byteArrayToInt(phyAddr);
 	}
 
-	public static byte[] writeLtoP_Map(int physicalAddr, byte[] temBuffer, int LinearAddr) {
-		int counter = 4 + LinearAddr*4;
+	/* Write the address of a new allocated first page of a chain to the hash map of LtoP_Map */
+	public static byte[] writeLtoP_Map(int physicalAddr, byte[] hashmap, int linearAddr) {
+		// compute the location that store the physical address of the page,
+		// since we use 4 bytes to store an address, we do the following calcualtion
+		int counter = 4 + linearAddr*4;
 		
 		byte[] tem = new byte[4];
 		tem = intToByteArray(physicalAddr);
 		for (int i = 0; i<4; i++) {
-			temBuffer[counter+i] = tem[i];
+			hashmap[counter+i] = tem[i];
 		}
-		return temBuffer;
+		return hashmap;
 	}
 	
+	/* This function is used to write a record/tuple to a page given the page address 
+	* and content of the record in byte. */
 	public static void writeOneRecord(int pageAddr, byte[] record, PBStorage MyStorage) throws Exception {
 		
 		byte[] buffer = new byte[MyStorage.pageSize];
 		MyStorage.ReadPage(pageAddr, buffer);
 		
-		// 	get number of tuples in the page
+		// get number of tuples in the page, this information is stored in 4-8th bytes in each page
 		byte[] numTupleByte = new byte[4];
 		for (int i = 4; i<8; i++) {
 			numTupleByte[i-4] = buffer[i];
 		}
 		int numTuple = byteArrayToInt(numTupleByte);
+		// calculate the position to store the new record/tuple
 		int offset = numTuple*100+8;
+		// update the number of bytes in the pages
 		numTupleByte = intToByteArray(numTuple+1);
-		//	write page
+		//	write the record into page
 		for (int i = 4; i<8; i++) {
 			buffer[i] = numTupleByte[i-4];
 		}
@@ -149,31 +155,36 @@ public class ProjectOne {
 		}
 		MyStorage.WritePage(pageAddr, buffer);
 	}
-	
+
+	/* This function is used to write one record to a chain given the first page address and record, 
+	* if all the existing pages of this chain are full, then we allocate a new page and write 
+	* the record to the page. */
 	public static void writeOneRecordToChain(int firstPage, PBStorage MyStorage, byte[] tuple, 
 			PBFileEntry e) throws Exception {
 		byte[] initializePage = new byte[MyStorage.pageSize];
 		int currentPage = firstPage;
-		//	read from page
+		//	readBuffer is used to store the content read from page
 		byte[] readBuffer = new byte[MyStorage.pageSize];
 		MyStorage.ReadPage(currentPage, readBuffer);
-
+		// To check whether a page is full, we use next page pointer which is stored in the 
+		// first 4 bytes in the page, if this pointer is 0, then this page is not full.
+		// Thus the following is to find the page that is not full.
 		int nextPage = getNextPagePointer(currentPage, MyStorage);
 		while (nextPage != 0) {
 			currentPage = nextPage;
 			nextPage = getNextPagePointer(currentPage, MyStorage);
 		}
+		// read the content of the non-full page and get the location/offset to write the record
 		MyStorage.ReadPage(currentPage, readBuffer);
-		int offsetBuffer = 8;
-		
 		byte[] numTupleByte = new byte[4];
 		for (int i = 0; i<4; i++) {
 			numTupleByte[i] = readBuffer[4+i];
 		}
 		int numTuple = byteArrayToInt(numTupleByte);
-
-		offsetBuffer = numTuple*100+8;
-
+		int offsetBuffer = numTuple*100+8;
+		// Try to write the record to the found non-full page, if the page has the enough space
+		// for the record, then write it to this page, otherwise allocate a new page and wirte 
+		// the record into this newly allocated page.
 		if (offsetBuffer+100<readBuffer.length) {
 			writeOneRecord(currentPage, tuple, MyStorage);
 		}
@@ -188,40 +199,26 @@ public class ProjectOne {
 				readBuffer[i] = newPageByte[i];
 			}
 			MyStorage.WritePage(currentPage, readBuffer);
-
 			currentPage = newPage;
-			writeOneRecord(currentPage, tuple, MyStorage);
-			
+			writeOneRecord(currentPage, tuple, MyStorage);	
 		}
-//		MyStorage.printStats();
-//		//	print log file
-//		System.out.println("current page is: " + Integer.toString(currentPage));
-//		
-//		byte[] currentBuffer = new byte[MyStorage.pageSize];
-//		MyStorage.ReadPage(currentPage, currentBuffer);
-//		
-//		byte[] part = new byte[4];
-//		for (int i = 0; i < 4; i++) {
-//			part[i] = currentBuffer[i+4];
-//		}
-//		System.out.println("current page record number is: " +  Integer.toString(byteArrayToInt(part)));
-//		System.out.println("ACL is: " + Float.toString(e.getACL()));
-//		System.out.println("sP is: " + Integer.toString(e.getsP()));
 	}
 	
+	/* get the next page address given the current page address */
 	public static int getNextPagePointer(int currentPageAddr, PBStorage MyStorage) throws Exception {
 		
 		byte[] currentBuffer = new byte[MyStorage.pageSize];
 		MyStorage.ReadPage(currentPageAddr, currentBuffer);
-		
+		// next page address is stored in the first 4 bytes of the current page
 		byte[] part = new byte[4];
 		for (int i = 0; i < 4; i++) {
 			part[i] = currentBuffer[i];
 		}
 		int nextPage = byteArrayToInt(part);
-		
 		return nextPage;
 	}
+
+	/* This function is used to do the split if ACL is larger than maximum ACL. */
 	public static void doSplit(PBStorage MyStorage, PBFileEntry fileEntry) throws Exception {
 		//	read file home page to a buffer
 		int fileHomePage = Integer.parseInt( fileEntry.getHomePage() );
@@ -235,13 +232,7 @@ public class ProjectOne {
 		int nextPage = getNextPagePointer(firstPageAddr, MyStorage);
 		byte[] temBuffer = new byte[MyStorage.pageSize];
 		MyStorage.ReadPage(firstPageAddr, temBuffer);
-//		printBufferContent(temBuffer);
 		pagesBuffered.add(temBuffer);
-		
-		
-//		System.out.println("Next page is");
-//		System.out.println(nextPage);
-		
 		MyStorage.DeAllocatePage((long) firstPageAddr);
 		fileEntry.setNumberOfPages(fileEntry.getNumberOfPages()-1);
 		while (nextPage != 0) {
@@ -252,30 +243,27 @@ public class ProjectOne {
 			nextPage = getNextPagePointer(tem, MyStorage);
 			MyStorage.DeAllocatePage((long) tem);
 			fileEntry.setNumberOfPages(fileEntry.getNumberOfPages()-1);
-//			printBufferContent(pagesBuffered.get(1));
 		}
-//		System.out.println(pagesBuffered.size());
-		
 
-		//	allocate new home pages for M side and 2M side
+		// allocate new home pages for M side and 2M side
 		byte[] initializePage = new byte[MyStorage.pageSize];
-		
+
+		// write the home page of M side
 		int homePageMside = MyStorage.AllocatePage();
-//		System.out.println(homePageMside);
 		fileHomePageBuffer = writeLtoP_Map(homePageMside, fileHomePageBuffer, fileEntry.getsP());
 		MyStorage.WritePage(fileHomePage, fileHomePageBuffer);
 		MyStorage.WritePage(homePageMside, initializePage);
 		
 		fileEntry.setNumberOfPages(fileEntry.getNumberOfPages()+1);
 		
+		// write the home page of 2M side
 		int homePage2Mside = MyStorage.AllocatePage();
-//		System.out.println(homePage2Mside);
 		fileHomePageBuffer = writeLtoP_Map(homePage2Mside, fileHomePageBuffer, fileEntry.getsP()+fileEntry.getM());
 		MyStorage.WritePage(fileHomePage, fileHomePageBuffer);
 		MyStorage.WritePage(homePage2Mside, initializePage);
 		
-//		printBufferContent(fileHomePageBuffer);
 		fileEntry.setNumberOfPages(fileEntry.getNumberOfPages()+1);
+
 		//	write back the records to two new chains
 		for (int i = 0; i<pagesBuffered.size(); i++) {
 			byte[] temByteArray = pagesBuffered.get(i);
@@ -292,19 +280,18 @@ public class ProjectOne {
 				}
 				if (byteArrayToInt(recordID)%(2*fileEntry.getM()) == fileEntry.getsP()) firstPageAddr = homePageMside;
 				else firstPageAddr = homePage2Mside;
-//				System.out.println(firstPageAddr);
 				writeOneRecordToChain(firstPageAddr, MyStorage, temRecord, fileEntry);
 			}
 		}
+		
 		//	set sP value
-//		System.out.println("sP is");
-//		System.out.println(fileEntry.getsP());
 		fileEntry.setsP(fileEntry.getsP()+1);
 
 	}
 	
+
 	public static void main(String[] args) throws Exception {
-		// create storage.
+		// Step 1: Create storage.
 		PBStorage MyStorage = new PBStorage();
 		
 		Scanner reader = new Scanner(System.in);  // Reading from System.in
@@ -317,9 +304,7 @@ public class ProjectOne {
 		System.out.println("Enter the value of M: ");
 		String MString = reader.nextLine();
 		reader.close();
-		
-//		String folderName = "/home/yichuan/Documents/COMS661/test";
-
+		// get page size and number of pages
 		int pageSize = Integer.parseInt(PS);
 		int nPages = Integer.parseInt(NP);
 		
@@ -332,27 +317,29 @@ public class ProjectOne {
 				"--Storage has been loaded successfully" + "with length " + MyStorage.PBFile.length());
 		
 		byte[] initializePage = new byte[MyStorage.pageSize];
-		byte[] tempBuffer = new byte[MyStorage.pageSize];
-		
-		// Allocate the home page for the linearly hashed file
+				
+		// Step 2: Allocate the home page for the linearly hashed file
 		int homePage = MyStorage.AllocatePage();
 		MyStorage.WritePage(homePage, initializePage);
 		System.out.println("Newpage numbers: " + homePage);
 		MyStorage.printStats();
+		// Add a filename and other properties of files to json file created initially in create storage.
 		MyStorage.addPBFileEntry(filename, Integer.toString(homePage));
-		// homePage of the file written
+
+		// Step 3: Create an LHConfig JSON element and set the homePage to the page allocated for LtoP_Map.
+		byte[] LtoP_Map = new byte[MyStorage.pageSize];
 		int counter = 0;
-		for (int i = 0; i < tempBuffer.length; i++) {
-			tempBuffer[i] = 'x';
+		for (int i = 0; i < LtoP_Map.length; i++) {
+			LtoP_Map[i] = 'x';
 		}
 		for (int i = 0; i < intToByteArray(0).length; i++) {
-			tempBuffer[i] = intToByteArray(0)[i];
+			LtoP_Map[i] = intToByteArray(0)[i];
 			counter = i;
 		}
 		
 		String LtoP_File = "LtoPOf_"+filename;
 		int M = Integer.parseInt(MString);
-
+		// set entry.java
 		PBFileEntry e = new PBFileEntry();
 		e.setName(filename);
 		e.setHomePage(Integer.toString(homePage));
@@ -364,31 +351,24 @@ public class ProjectOne {
 		e.setACL_Max((float) 1.5);
 		e.setACL((float) 1.0);
 		
-		
+		// Step 4: Allocate M pages to serve as home pages of M chains
 		int M_tem = e.getM();
 		for (int i = 0; i<M_tem; i++) {
 			int homePageOfChain = MyStorage.AllocatePage();
 			MyStorage.WritePage(homePageOfChain, initializePage);
-			tempBuffer = writeLtoP_Map(homePageOfChain, tempBuffer, i);
+			LtoP_Map = writeLtoP_Map(homePageOfChain, LtoP_Map, i);
 		}
-		MyStorage.WritePage(homePage, tempBuffer);
-		
+		MyStorage.WritePage(homePage, LtoP_Map);
 		
 		//	generate a tuple with 100 bytes first 4 bytes is ID and random for others
 		byte[] tuple = new byte[100];
 		byte[] ID_tem = new byte[4];
-		
-		String filePath = "/home/yichuan/Documents/leetcode/Records.txt";
-		ArrayList<byte[]> records = getData(filePath);
+		// Step 5: Get the records and write them to the file
+		String filePath = "Records.txt"; // directory of the text file which contains the records
+		ArrayList<byte[]> records = getRecords(filePath);
 		System.out.println(records.size());
 		
-		for (int k = 0; k<500; k++) {
-			
-//			new Random().nextBytes(tuple);	
-//			ID_tem = intToByteArray(k);
-//			for (int j = 0; j<4; j++) {
-//				tuple[j] = ID_tem[j];
-//			}
+		for (int k = 0; k<10000; k++) {
 			
 			tuple = records.get(k);
 			
@@ -399,12 +379,12 @@ public class ProjectOne {
 			}
 			int numID = byteArrayToInt(tempID);
 			
-			//	calculate page number
+			//	get home page of the file
 			MyStorage.LoadStorage(folderName);
 			int home_Page = MyStorage.getHomePage(filename);
-			MyStorage.ReadPage(home_Page, tempBuffer);
-			
-			int firstPage = getPhy(numID%M_tem+home_Page+1, tempBuffer);
+			MyStorage.ReadPage(home_Page, LtoP_Map);
+			// get the first page of the chain where write the record
+			int firstPage = getPhy(numID%M_tem+home_Page+1, LtoP_Map);
 			
 			writeOneRecordToChain(firstPage, MyStorage, tuple, e);
 
@@ -420,13 +400,11 @@ public class ProjectOne {
 //				System.out.println(e.getNumberOfPages());
 			}
 		}
-		
-//		doSplit(MyStorage, e);
+
 		System.out.println("Current total page number is " + e.getNumberOfPages()); //page number
 		System.out.println("The current acl value is " + e.getACL()); //true acl value
 		System.out.println("The current sP value is " + e.getsP()); //sP value
 		System.out.println("The current M is " + e.getM()); // M value
 		MyStorage.printStats();
-
 	}
 }
