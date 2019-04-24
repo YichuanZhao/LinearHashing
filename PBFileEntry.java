@@ -1,16 +1,21 @@
 package PBStorage;
 
 public class PBFileEntry{
-		private String name;
-		private String homePage;
-		private String LtoP_File;
-		private int M;
-		private int sP;
-		private int NumberOfPages;
-		private float ACL_Min;
-		private float ACL_Max;
-		private float ACL;
+		private String name; // name of file
+		private String homePage; //A home pate entry, an integer that is address of a page in a PB storage. -1 indicates that we will not use this field.
+		private String LtoP_File; // The name of the file that hosts LtoP_Map.
+		private int M; 
+		private int sP; 
+		private int NumberOfPages; // Number of pages in all chains in the file.
+		private float ACL_Min; // Minimum average chain length.
+		private float ACL_Max; // Maximum average chain length. 
+		private float ACL; // Current average chain length. 
 		
+
+
+		/*
+		Set and get methods for each variable.
+		*/
 		public void setName(String name){
 			this.name = name;
 		}
